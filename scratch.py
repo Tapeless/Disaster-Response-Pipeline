@@ -1,22 +1,34 @@
+#imports
 import sys
 import pickle
 import nltk
+import multiprocessing
+from joblib import parallel_backend
 import pandas as pd
 import numpy as np
 import re
+import string
 import sqlite3
 from sqlalchemy import create_engine
+
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
+
+from sklearn.metrics import f1_score
+from sklearn.metrics import classification_report
+from sklearn.metrics import multilabel_confusion_matrix
 from sklearn.model_selection import GridSearchCV
-from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer, TfidfVectorizer
+from sklearn.neighbors import KNeighborsClassifier
+
 from sklearn.multioutput import MultiOutputClassifier
 
-nltk.download(['punkt', 'wordnet', 'averaged_perceptron_tagger', 'stopwords'])
+nltk.download(['punkt', 'wordnet', 'averaged_perceptron_tagger', 'stopwords', 'omw-1.4'])
 
 def load_data(database_filepath):
     # load data from database
@@ -40,13 +52,11 @@ def load_data(database_filepath):
     y = np.transpose(np.array(y))
     return X, y, categories
 
+
 #This function needs to: use a custom tokenize function using nltk to case normalize, lemmatize, and tokenize text. 
 #This function is used in the machine learning pipeline to vectorize and then apply TF-IDF to the text.
 def tokenize(text):
-    '''
-    Takes in strings of text and tokenizes/lemmatizes.
-    Called in the pipeline by TfIdfVectorizer.
-    '''
+
     stop_words = stopwords.words("english")
     lemmatizer = WordNetLemmatizer()
 
@@ -65,32 +75,38 @@ def tokenize(text):
 #GridSearchCV is used to find the best parameters for the model.
 #The TF-IDF pipeline is only trained with the training data. 
 def build_model():
-    '''
-    Defines a pipeline to tokenize text input and classify categories.
-    GridSearchCV is used to find most performant parameters from options in parameters dict
-    '''
 
     pipeline = Pipeline([
         ('vect', TfidfVectorizer(tokenizer=tokenize)),
-        ('clf', MultiOutputClassifier(AdaBoostClassifier(random_state=42)))
+        ('clf', AdaBoostClassifier(random_state=42))
     ])
     
     
     parameters = {
-        'clf__estimator__n_estimators' : [25,50,100],
-        'clf__estimator__learning_rate' : [0.75, 1.5]
+        'clf__n_estimators' : [25,50,75],
+        'clf__learning_rate' : [0.75, 1.5]
     }
 
-    cv = GridSearchCV(pipeline, param_grid=parameters, n_jobs=1)
-    return cv
+    cv = GridSearchCV(pipeline, param_grid=parameters, n_jobs=-1)
 
-def eval_model(Y_pred,Y_test,categories):
-    '''
-    This function takes in the values predicted + ground truth values, and calculates the
-    precision, recall, and f1 score for each category.
-    This is necessary because sklearn's scoring does not support multioutput classification.
-    A dataframe with the precision/recall/f1 for each category is returned.
-    '''
+    multi_target_forest = MultiOutputClassifier(cv,n_jobs=-1)
+    return multi_target_forest
+
+#The f1 score, precision and recall for the test set is outputted for each category.
+def evaluate_model(model, X_test, Y_test, category_names):
+    
+    Y_pred = model.predict(X_test)
+    
+    labels = category_names
+    #confusion_mat = confusion_matrix(Y_test, Y_pred, labels=labels)
+    accuracy = (Y_pred == Y_test).mean()
+
+    print("Labels:", labels)
+    #print("Confusion Matrix:\n", confusion_mat)
+    print("Accuracy:", accuracy)
+    #print("\nBest Parameters:", cv.best_params_)
+
+def eval_model(Y_pred,Y_test):
     #init 36 len arrays to store each
     true_pos = np.zeros((36,))
     false_pos = np.zeros((36,))
@@ -124,57 +140,34 @@ def eval_model(Y_pred,Y_test,categories):
     #calculate f1 for each
     for i in range(len(f1)):
         f1[i] = 2 * (precision[i] * recall[i]) / (precision[i] + recall[i])
-    
-    #print results to terminal
-    #22 is longest category string length
-    fmt = '{:<22} {:<8} {:<6} {:<8}'
-    print(fmt.format("Categories","Precision","Recall","f1 score")))
-    for i in range(len(f1)):
-        print(fmt.format(np.round(categories[i],3),np.round(precision[i],3),np.round(recall[i],3),np.round(f1[i],3)))
 
     #store results in dataframe
-    results = pd.DataFrame(list(zip(categories,precision,recall,f1)),columns=["Categories","Precision","Recall","f1_score"])
+    results = pd.DataFrame()
+    results["Category"] = categories
+    results["f1"] = f1
+    results["precision"] = precision
+    results["recall"] = recall
 
     #return dataframe
     return results
 
-def save_model(model, model_filepath):
-    '''
-    Saves trained model to pickle file.
-    Args:
-    model - model to save
-    model_filepath - filepath to save to
-    '''
-    pickle.dump(model, open(model_filepath, 'wb'))
-
 def main():
-    if len(sys.argv) == 3:
-        database_filepath, model_filepath = sys.argv[1:]
-        print('Loading data...\n    DATABASE: {}'.format(database_filepath))
-        X, Y, category_names = load_data(database_filepath)
-        X_train, X_test, Y_train, Y_test = train_test_split(X, Y)
-        
-        print('Building model...')
-        model = build_model()
-        
-        print('Training model...')
-        model.fit(X_train, Y_train)
-        print(f"Best Params: {model.best_params_}")
-
-        print('Evaluating model...')
-        Y_pred = model.predict(X_test)
-        eval_model(Y_pred, Y_test, category_names)
-
-        print('Saving model...\n    MODEL: {}'.format(model_filepath))
-        save_model(model, model_filepath)
-
-        print('Trained model saved!')
-
-    else:
-        print('Please provide the filepath of the disaster messages database '\
-              'as the first argument and the filepath of the pickle file to '\
-              'save the model to as the second argument. \n\nExample: python '\
-              'train_classifier.py ../data/DisasterResponse.db classifier.pkl')
+    print("loading data...")
+    X, Y, category_names = load_data("data/DisasterResponse.db")
+    print("splitting data...")
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2)
+    print("building model...")
+    model=build_model()
+    print("training model...")
+    model.fit(X_train,Y_train)
+    print("predicting on test data...")
+    Y_pred = model.predict(X_test)
+    print("scoring data...")
+    print(model.score(X_test,Y_test))
+    print("saving resultant dataframe to results.csv")
+    pd.to_csv(eval_model(Y_pred,Y_test),"results.csv")
 
 if __name__ == '__main__':
+    multiprocessing.set_start_method('forkserver')
+    parallel_backend("threading")
     main()
