@@ -1,4 +1,20 @@
-# Disaster Response Pipeline Project
+# Disaster Response Pipeline
+![image](https://user-images.githubusercontent.com/72606788/202878115-e81affd3-c8ac-45eb-8f85-d53cfac85e4f.png)
+This repo contains python scripts to clean data and generate an NLP model trained on the figure8 disaster response dataset available through Udacity Data Science Nanodegree program.
+This dataset contains ~30000 pre-labeled tweets related (and not related!) to a flood.
+After training and scoring the model, it is saved to a pickle file and utilized in a web dashboard.
+
+### Required Packages:
+- pandas
+- numpy
+- sqlite3
+- sqlalchemy
+- sklearn
+- pickle
+- nltk
+- plotly
+- joblib
+- flask
 
 ### Instructions:
 1. Run the following commands in the project's root directory to set up your database and model.
@@ -11,4 +27,4 @@
 2. Run the following command in the app's directory to run your web app.
     `python run.py`
 
-3. Go to http://0.0.0.0:3001/
+3. Go to http://127.0.0.1:3001/ to view the webpage. 
