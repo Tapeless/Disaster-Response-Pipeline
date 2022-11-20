@@ -2,6 +2,7 @@ import json
 import plotly
 import re
 import pandas as pd
+import nltk
 
 import joblib
 
@@ -18,6 +19,9 @@ from sklearn.multioutput import MultiOutputClassifier
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
+
+nltk.download(['punkt', 'wordnet', 'averaged_perceptron_tagger', 'stopwords','omw-1.4'])
+
 
 app = Flask(__name__)
 
