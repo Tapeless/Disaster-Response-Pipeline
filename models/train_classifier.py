@@ -40,8 +40,6 @@ def load_data(database_filepath):
     y = np.transpose(np.array(y))
     return X, y, categories
 
-#This function needs to: use a custom tokenize function using nltk to case normalize, lemmatize, and tokenize text. 
-#This function is used in the machine learning pipeline to vectorize and then apply TF-IDF to the text.
 def tokenize(text):
     '''
     Takes in strings of text and tokenizes/lemmatizes.
@@ -61,9 +59,6 @@ def tokenize(text):
         
     return tokens
 
-#The script builds a pipeline that processes text and then performs multi-output classification on the 36 categories in the dataset. 
-#GridSearchCV is used to find the best parameters for the model.
-#The TF-IDF pipeline is only trained with the training data. 
 def build_model():
     '''
     Defines a pipeline to tokenize text input and classify categories.

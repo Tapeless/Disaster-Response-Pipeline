@@ -1,31 +1,70 @@
 import json
 import plotly
+import re
 import pandas as pd
-import numpy as np
+
+import joblib
 
 from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
-
 from flask import Flask
-from flask import render_template, request, jsonify
+from flask import render_template, request
 from plotly.graph_objs import Bar
-import joblib
 from sqlalchemy import create_engine
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.multioutput import MultiOutputClassifier
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import stopwords
 
 app = Flask(__name__)
-
-def tokenize(text):
-    vectorizer = TfidfVectorizer()
-    return vectorizer.fit_transform(text)
 
 engine = create_engine('sqlite:///../data/DisasterResponse.db')
 df = pd.read_sql_table('data/DisasterResponse.db', engine)
 
+def tokenize(text):
+    '''
+    Takes in strings of text and tokenizes/lemmatizes.
+    Called in the pipeline by TfIdfVectorizer.
+    '''
+    stop_words = stopwords.words("english")
+    lemmatizer = WordNetLemmatizer()
+
+    # normalize case and remove punctuation
+    text = re.sub(r"[^a-zA-Z0-9]", " ", text.lower())
+    
+    # tokenize text
+    tokens = word_tokenize(text)
+    
+    # lemmatize and remove stop words
+    tokens = [lemmatizer.lemmatize(word) for word in tokens if word not in stop_words]
+        
+    return tokens
+
+def build_model():
+    '''
+    Defines a pipeline to tokenize text input and classify categories.
+    GridSearchCV is used to find most performant parameters from options in parameters dict
+    '''
+
+    pipeline = Pipeline([
+        ('vect', TfidfVectorizer(tokenizer=tokenize)),
+        ('clf', MultiOutputClassifier(AdaBoostClassifier(random_state=42)))
+    ])
+    
+    
+    parameters = {
+        'clf__estimator__n_estimators' : [25,50,100],
+        'clf__estimator__learning_rate' : [0.75, 1.5]
+    }
+
+    cv = GridSearchCV(pipeline, param_grid=parameters, n_jobs=1)
+    return cv
+
 # load models
 model = joblib.load("../models/classifier.pkl")
-vect_model = joblib.load("../models/vectorizer.pkl")
-
 
 # index webpage displays cool visuals and receives user input text for model
 @app.route('/')
@@ -57,9 +96,28 @@ def index():
                     'title': "Count"
                 },
                 'xaxis': {
-                    'title': "Classification"
+                    'title': "Classification",
+                    'tickangle' : 45
                 }
             }
+        },
+        {
+            'data': [
+                Bar(
+                    x=genre_names,
+                    y=genre_counts,
+                )
+            ],
+
+            'layout': {
+                'title': "Genres",
+                'yaxis': {
+                    'title': "Genre Counts"
+                },
+                'xaxis': {
+                    'title': "Genre Names"
+                }
+                }
         }
     ]
     
@@ -78,7 +136,7 @@ def go():
     query = request.args.get('query', '') 
     # use model to predict classification for query
     
-    classification_labels = model.predict(vect_model.transform([query]))
+    classification_labels = model.predict([query])
     classification_results = dict(zip(df.columns[4:].tolist(), classification_labels.T))
         
 
