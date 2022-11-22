@@ -167,7 +167,7 @@ def eval_model(Y_pred, Y_test, categories):
         f1[i] = 2 * (precision[i] * recall[i]) / (precision[i] + recall[i])
 
     # print results to terminal
-    fmt = '{:<22} {:<8} {:<6} {:<8}'
+    fmt = '{:<22} {:<9} {:<6} {:<8}'
     print(fmt.format("Categories", "Precision", "Recall", "f1 score"))
     for i in range(len(f1)):
         print(
