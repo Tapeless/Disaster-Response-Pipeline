@@ -6,7 +6,6 @@ import nltk
 
 import joblib
 
-from nltk.stem import WordNetLemmatizer
 from flask import Flask
 from flask import render_template, request
 from plotly.graph_objs import Bar
@@ -20,13 +19,15 @@ from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 
-nltk.download(['punkt', 'wordnet', 'averaged_perceptron_tagger', 'stopwords','omw-1.4'])
+nltk.download(
+    ['punkt', 'wordnet', 'averaged_perceptron_tagger', 'stopwords', 'omw-1.4'])
 
 
 app = Flask(__name__)
 
 engine = create_engine('sqlite:///../data/DisasterResponse.db')
 df = pd.read_sql_table('data/DisasterResponse.db', engine)
+
 
 def tokenize(text):
     '''
@@ -38,14 +39,16 @@ def tokenize(text):
 
     # normalize case and remove punctuation
     text = re.sub(r"[^a-zA-Z0-9]", " ", text.lower())
-    
+
     # tokenize text
     tokens = word_tokenize(text)
-    
+
     # lemmatize and remove stop words
-    tokens = [lemmatizer.lemmatize(word) for word in tokens if word not in stop_words]
-        
+    tokens = [lemmatizer.lemmatize(word)
+              for word in tokens if word not in stop_words]
+
     return tokens
+
 
 def build_model():
     '''
@@ -57,26 +60,27 @@ def build_model():
         ('vect', TfidfVectorizer(tokenizer=tokenize)),
         ('clf', MultiOutputClassifier(AdaBoostClassifier(random_state=42)))
     ])
-    
-    
+
     parameters = {
-        'clf__estimator__n_estimators' : [25,50,100],
-        'clf__estimator__learning_rate' : [0.75, 1.5]
+        'clf__estimator__n_estimators': [25, 50, 100],
+        'clf__estimator__learning_rate': [0.75, 1.5]
     }
 
     cv = GridSearchCV(pipeline, param_grid=parameters, n_jobs=1)
     return cv
 
+
 # load models
 model = joblib.load("../models/classifier.pkl")
 
 # index webpage displays cool visuals and receives user input text for model
+
+
 @app.route('/')
 @app.route('/index')
 def index():
-    
+
     # extract data needed for visuals
-    # TODO: Below is an example - modify to extract data for your own visuals
     genre_counts = df.groupby('genre').count()['message']
     genre_names = list(genre_counts.index)
     sum_names = df.columns[4:]
@@ -84,7 +88,6 @@ def index():
     for col in sum_names:
         sum_counts[col] = df[col].sum()
     # create visuals
-    # TODO: Below is an example - modify to create your own visuals
     graphs = [
         {
             'data': [
@@ -101,7 +104,7 @@ def index():
                 },
                 'xaxis': {
                     'title': "Classification",
-                    'tickangle' : 45
+                    'tickangle': 45
                 }
             }
         },
@@ -121,14 +124,14 @@ def index():
                 'xaxis': {
                     'title': "Genre Names"
                 }
-                }
+            }
         }
     ]
-    
+
     # encode plotly graphs in JSON
     ids = ["graph-{}".format(i) for i, _ in enumerate(graphs)]
     graphJSON = json.dumps(graphs, cls=plotly.utils.PlotlyJSONEncoder)
-    
+
     # render web page with plotly graphs
     return render_template('master.html', ids=ids, graphJSON=graphJSON)
 
@@ -137,21 +140,20 @@ def index():
 @app.route('/go')
 def go():
     # save user input in query
-    query = request.args.get('query', '') 
+    query = request.args.get('query', '')
     # use model to predict classification for query
-    
+
     classification_labels = model.predict([query])
-    classification_results = dict(zip(df.columns[4:].tolist(), classification_labels.T))
-        
+    classification_results = dict(
+        zip(df.columns[4:].tolist(), classification_labels.T))
 
-
-
-    # This will render the go.html Please see that file. 
+    # This will render the go.html Please see that file.
     return render_template(
         'go.html',
         query=query,
         classification_result=classification_results
     )
+
 
 def main():
     app.run(host='0.0.0.0', port=3001, debug=True)
